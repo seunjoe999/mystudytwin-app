@@ -1,5 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { courses, documents as seedDocuments, quizBank as seedQuestions, type Course, type CourseDocument, type QuizQuestion } from "../data/mockData";
+import { appendProvenance, type ProvenanceEntry, type ProvenanceActor } from "../lib/provenance";
+import type { GapDescriptor, ScaffoldCandidate } from "../lib/gaps";
 
 export type Role = "student" | "teacher";
 export type Sender = "student" | "teacher" | "atdt" | "asdt";
@@ -49,6 +51,8 @@ interface AppStateShape {
   sendMessage: (studentId: string, sender: Sender, text: string, channel: Channel) => void;
   selectedStudentId: string;
   setSelectedStudentId: (id: string) => void;
+  provenance: ProvenanceEntry[];
+  acceptScaffold: (gap: GapDescriptor, candidate: ScaffoldCandidate) => void;
 }
 
 const AppContext = createContext<AppStateShape | null>(null);
@@ -60,6 +64,7 @@ const WATCHED_KEY = "mystudytwin.watched";
 const DOCS_KEY = "mystudytwin.documents";
 const QUESTIONS_KEY = "mystudytwin.questions";
 const MESSAGES_KEY = "mystudytwin.messages.v2";
+const PROVENANCE_KEY = "mystudytwin.provenance";
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -109,6 +114,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [questions, setQuestions] = useState<QuizQuestion[]>(() => load(QUESTIONS_KEY, seedQuestions));
   const [messages, setMessages] = useState<ChatMessage[]>(() => load(MESSAGES_KEY, defaultMessages));
   const [selectedStudentId, setSelectedStudentId] = useState("stu1");
+  const [provenance, setProvenance] = useState<ProvenanceEntry[]>(() => load(PROVENANCE_KEY, []));
+  const provenanceQueue = useRef<Promise<ProvenanceEntry[]>>(Promise.resolve(provenance));
 
   useEffect(() => {
     localStorage.setItem(COURSE_KEY, courseId);
@@ -131,21 +138,57 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
   }, [messages]);
+  useEffect(() => {
+    localStorage.setItem(PROVENANCE_KEY, JSON.stringify(provenance));
+  }, [provenance]);
 
   const currentCourse = courses.find((c) => c.id === courseId) || courses[0];
+
+  // Serialized so concurrent calls can't race on the same prevHash.
+  const logEvent = (actor: ProvenanceActor, action: string, payload: Record<string, unknown> = {}) => {
+    provenanceQueue.current = provenanceQueue.current.then(async (currentLog) => {
+      const next = await appendProvenance(currentLog, actor, action, payload);
+      setProvenance(next);
+      return next;
+    });
+  };
 
   const addSession = (s: Omit<PlannerSession, "id">) => setSessions((prev) => [...prev, { ...s, id: `s${Date.now()}` }]);
   const removeSession = (id: string) => setSessions((prev) => prev.filter((s) => s.id !== id));
   const addTeacherSession = (s: Omit<PlannerSession, "id">) => setTeacherSessions((prev) => [...prev, { ...s, id: `t${Date.now()}` }]);
   const removeTeacherSession = (id: string) => setTeacherSessions((prev) => prev.filter((s) => s.id !== id));
   const markWatched = (id: string) => setWatchedVideoIds((prev) => new Set(prev).add(id));
-  const addDocument = (d: Omit<CourseDocument, "id">) => setDocuments((prev) => [{ ...d, id: `d${Date.now()}` }, ...prev]);
-  const addQuestion = (q: Omit<QuizQuestion, "id">) => setQuestions((prev) => [...prev, { ...q, id: `q${Date.now()}` }]);
-  const sendMessage = (studentId: string, sender: Sender, text: string, channel: Channel) =>
+
+  const addDocument = (d: Omit<CourseDocument, "id">) => {
+    setDocuments((prev) => [{ ...d, id: `d${Date.now()}` }, ...prev]);
+    logEvent("teacher", "document.ingested", { title: d.title, topic: d.topic, hasContent: !!d.content });
+  };
+
+  const addQuestion = (q: Omit<QuizQuestion, "id">) => {
+    setQuestions((prev) => [...prev, { ...q, id: `q${Date.now()}` }]);
+    logEvent("teacher", "examination.question_published", { topic: q.topic });
+  };
+
+  const sendMessage = (studentId: string, sender: Sender, text: string, channel: Channel) => {
     setMessages((prev) => [
       ...prev,
       { id: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`, studentId, sender, text, channel, time: new Date().toLocaleString([], { hour: "2-digit", minute: "2-digit" }) },
     ]);
+    logEvent(sender, `${channel}.message`, { studentId, length: text.length });
+  };
+
+  const acceptScaffold = (gap: GapDescriptor, candidate: ScaffoldCandidate) => {
+    const now = new Date();
+    const day = (now.getDay() + 6) % 7; // convert Sun=0 to Mon=0 index
+    addSession({
+      day,
+      time: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+      title: `Scaffold: ${candidate.title}`,
+      courseId: currentCourse.id,
+      kind: "study",
+    });
+    logEvent("student", "tutoring.scaffold_accept", { gapId: gap.id, topic: gap.topic, candidate: candidate.title });
+  };
 
   return (
     <AppContext.Provider
@@ -173,6 +216,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         sendMessage,
         selectedStudentId,
         setSelectedStudentId,
+        provenance,
+        acceptScaffold,
       }}
     >
       {children}

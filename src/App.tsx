@@ -9,6 +9,7 @@ import { Library } from "./pages/Library";
 import { Analytics } from "./pages/Analytics";
 import { Planner } from "./pages/Planner";
 import { Messages } from "./pages/Messages";
+import { AuditLog } from "./pages/AuditLog";
 import { AppStateProvider, useAppState } from "./state/AppState";
 
 function Shell() {
@@ -33,6 +34,7 @@ function Shell() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/planner" element={<Planner />} />
           <Route path="/messages" element={<Messages />} />
+          <Route path="/audit" element={<AuditLog />} />
         </Routes>
       </div>
       <CognitiveDrawer />

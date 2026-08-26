@@ -3,6 +3,7 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, Settings, Maximize, Clock,
 import { videos } from "../data/mockData";
 import { useAppState } from "../state/AppState";
 import { AtdtChat } from "../components/AtdtChat";
+import { GapNegotiation } from "../components/GapNegotiation";
 import { TeacherOverview } from "./TeacherOverview";
 
 function formatTime(sec: number) {
@@ -122,6 +123,8 @@ export function SelfTutoring() {
             ))}
           </div>
         </div>
+
+        <GapNegotiation />
 
         <AtdtChat />
 

@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Video, Users, Timer, BookOpen, BarChart3, Calendar, GraduationCap, Brain, MessageCircle } from "lucide-react";
+import { Video, Users, Timer, BookOpen, BarChart3, Calendar, GraduationCap, Brain, MessageCircle, ShieldCheck } from "lucide-react";
 import { courses, teacher, student } from "../data/mockData";
 import { useAppState } from "../state/AppState";
 
@@ -20,6 +20,7 @@ const navItems = [
   { path: "/analytics", icon: BarChart3, title: "Analytics" },
   { path: "/planner", icon: Calendar, title: "Planner" },
   { path: "/messages", icon: MessageCircle, title: "Messages" },
+  { path: "/audit", icon: ShieldCheck, title: "Audit Log" },
 ];
 
 export function Sidebar() {

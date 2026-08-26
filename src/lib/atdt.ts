@@ -1,5 +1,5 @@
 import { type CourseDocument, type Topic, teacher } from "../data/mockData";
-import { findRelevantPassage } from "./pdfExtract";
+import { findRelevantPassage } from "./textRetrieval";
 
 const teachingBlurbs: Record<string, string> = {
   "Linked Lists":
