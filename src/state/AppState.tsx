@@ -53,6 +53,7 @@ interface AppStateShape {
   setSelectedStudentId: (id: string) => void;
   provenance: ProvenanceEntry[];
   acceptScaffold: (gap: GapDescriptor, candidate: ScaffoldCandidate) => void;
+  logEvent: (actor: ProvenanceActor, action: string, payload?: Record<string, unknown>) => void;
 }
 
 const AppContext = createContext<AppStateShape | null>(null);
@@ -218,6 +219,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setSelectedStudentId,
         provenance,
         acceptScaffold,
+        logEvent,
       }}
     >
       {children}

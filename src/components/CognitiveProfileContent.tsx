@@ -1,5 +1,7 @@
-import { Brain, TrendingUp, AlertTriangle, CheckCircle, Clock, Zap } from "lucide-react";
+import { useState } from "react";
+import { Brain, TrendingUp, AlertTriangle, CheckCircle, Clock, Zap, XCircle } from "lucide-react";
 import { statusColor, type Topic } from "../data/mockData";
+import { useAppState } from "../state/AppState";
 
 export function CognitiveProfileContent({
   topics,
@@ -12,9 +14,33 @@ export function CognitiveProfileContent({
   ownerName?: string;
   showFocusState?: boolean;
 }) {
+  const { questions, logEvent } = useAppState();
+  const [assessing, setAssessing] = useState(false);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [result, setResult] = useState<"correct" | "incorrect" | null>(null);
+
   const overallMastery = Math.round(topics.reduce((s, t) => s + t.mastery, 0) / topics.length);
   const struggling = [...topics].filter((t) => t.status !== "mastered").sort((a, b) => a.mastery - b.mastery);
   const worst = struggling[0];
+  const microQuestion = worst ? questions.find((q) => q.topic === worst.topic) : undefined;
+
+  const startAssessment = () => {
+    setAssessing(true);
+    setSelected(null);
+    setResult(null);
+  };
+
+  const answerAssessment = (index: number) => {
+    if (!microQuestion || result) return;
+    setSelected(index);
+    const correct = index === microQuestion.correctIndex;
+    setResult(correct ? "correct" : "incorrect");
+    logEvent("student", "simulation.micro_assessment_completed", {
+      topic: worst.topic,
+      questionId: microQuestion.id,
+      correct,
+    });
+  };
 
   const statusIcon = (status: string) => {
     if (status === "mastered") return <CheckCircle size={14} color="#00c853" />;
@@ -97,9 +123,46 @@ export function CognitiveProfileContent({
                 High probability of struggling with <strong style={{ color: "var(--navy)" }}>"{worst.topic}"</strong> based
                 on {ownerName ? `${ownerName}'s` : "the"} current mastery trend.
               </p>
-              <button className="btn btn-primary" style={{ width: "100%" }}>
-                Run Micro-Assessment
-              </button>
+
+              {!assessing && (
+                <button
+                  className="btn btn-primary"
+                  style={{ width: "100%" }}
+                  onClick={startAssessment}
+                  disabled={!microQuestion}
+                  title={microQuestion ? undefined : `No published question tagged "${worst.topic}" yet`}
+                >
+                  {microQuestion ? "Run Micro-Assessment" : "No Assessment Available Yet"}
+                </button>
+              )}
+
+              {assessing && microQuestion && (
+                <div style={{ background: "var(--bg)", borderRadius: 10, padding: 12 }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)", marginBottom: 8 }}>{microQuestion.question}</p>
+                  {microQuestion.options.map((opt, i) => {
+                    const isSelected = selected === i;
+                    const isCorrectOpt = i === microQuestion.correctIndex;
+                    let cls = "option-btn";
+                    if (result && isSelected) cls += isCorrectOpt ? " correct" : " incorrect";
+                    else if (result && isCorrectOpt) cls += " correct";
+                    else if (isSelected) cls += " selected";
+                    return (
+                      <button key={opt} className={cls} onClick={() => answerAssessment(i)} disabled={!!result}>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                  {result && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 12, fontWeight: 700, color: result === "correct" ? "var(--green)" : "var(--red)" }}>
+                      {result === "correct" ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                      {result === "correct" ? "Correct — nice work." : `Not quite — correct answer: ${microQuestion.options[microQuestion.correctIndex]}`}
+                    </div>
+                  )}
+                  <button className="btn btn-outline" style={{ width: "100%", marginTop: 10 }} onClick={() => setAssessing(false)}>
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -45,7 +45,7 @@ export function OllamaStatus() {
     return (
       <div className="row-between" style={{ marginBottom: 8 }}>
         <span className="muted" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
-          <ZapOff size={11} /> Offline mode — built-in tutor logic (no Ollama detected on localhost:11434)
+          <ZapOff size={11} /> Using built-in tutor (still fully functional) — connect a local Ollama for live AI replies
         </span>
         <button className="btn btn-outline" style={{ padding: "2px 8px", fontSize: 10 }} onClick={check}>
           Retry
