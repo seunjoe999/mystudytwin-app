@@ -5,7 +5,9 @@
 // Without one, it returns 501 and the client falls back to the offline
 // template-based tutor logic, so the app works perfectly with zero setup.
 //
-// Supported: ANTHROPIC_API_KEY (Claude) or OPENAI_API_KEY (GPT).
+// Supported, checked in this order: OLLAMA_API_KEY (Ollama Cloud/Turbo —
+// reachable by any visitor, not just the presenter's machine), then
+// ANTHROPIC_API_KEY (Claude), then OPENAI_API_KEY (GPT).
 
 export const config = { runtime: "edge" };
 
@@ -23,10 +25,34 @@ export default async function handler(req: Request): Promise<Response> {
 
   const { systemPrompt, userMessage } = (await req.json()) as ChatBody;
 
+  const ollamaCloudKey = process.env.OLLAMA_API_KEY;
+  const ollamaCloudModel = process.env.OLLAMA_CLOUD_MODEL || "gpt-oss:20b";
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
 
   try {
+    if (ollamaCloudKey) {
+      const res = await fetch("https://ollama.com/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ollamaCloudKey}`,
+        },
+        body: JSON.stringify({
+          model: ollamaCloudModel,
+          stream: false,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+        }),
+      });
+      if (!res.ok) return new Response(JSON.stringify({ error: "Upstream error (Ollama Cloud)" }), { status: 502 });
+      const data = await res.json();
+      const text = data?.message?.content ?? null;
+      return new Response(JSON.stringify({ text }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
     if (anthropicKey) {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
