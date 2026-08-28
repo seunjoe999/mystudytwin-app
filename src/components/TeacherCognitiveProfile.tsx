@@ -4,6 +4,7 @@ import { students, documents, teacher, statusColor, videos } from "../data/mockD
 import { useAppState } from "../state/AppState";
 import { CognitiveProfileContent } from "./CognitiveProfileContent";
 import { AsdtChat } from "./AsdtChat";
+import { TwinNegotiationLog } from "./TwinNegotiationLog";
 import { detectGaps, rankScaffolds } from "../lib/gaps";
 
 export function TeacherCognitiveProfile() {
@@ -134,23 +135,7 @@ export function TeacherCognitiveProfile() {
                 <p className="muted" style={{ marginBottom: 10 }}>
                   This is {selected.name}'s ASDT talking to your ATDT in real time — the same negotiation their device shows.
                 </p>
-                <div className="chat-bubble me" style={{ maxWidth: "100%", marginBottom: 8 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.85, marginBottom: 3, textTransform: "uppercase" }}>
-                    ASDT → ATDT · gap.descriptor
-                  </div>
-                  topic: <strong>{gap.topic}</strong> · zpdEstimate: {gap.zpdEstimate}%
-                </div>
-                <div className="chat-bubble them" style={{ maxWidth: "100%" }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, opacity: 0.7, marginBottom: 3, textTransform: "uppercase" }}>
-                    ATDT → ASDT · scaffold.candidates
-                  </div>
-                  {candidates.length === 0 && <span className="muted">No matching material yet.</span>}
-                  {candidates.map((c) => (
-                    <div key={c.refId} style={{ fontSize: 12, padding: "3px 0" }}>
-                      {c.kind === "video" ? "▶" : "📄"} {c.title} {accepted?.refId === c.refId && "— accepted ✓"}
-                    </div>
-                  ))}
-                </div>
+                <TwinNegotiationLog gap={gap} candidates={candidates} acceptedTitle={accepted?.title} />
               </div>
             );
           })()}
