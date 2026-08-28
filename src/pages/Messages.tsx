@@ -4,6 +4,7 @@ import { students, teacher, student as studentPerson, documents } from "../data/
 import { useAppState } from "../state/AppState";
 import { generateAtdtReply, buildAtdtSystemPrompt } from "../lib/atdt";
 import { askAI } from "../lib/ai";
+import { SyncStatus } from "../components/SyncStatus";
 
 export function Messages() {
   const { currentCourse, role, messages, sendMessage, selectedStudentId, setSelectedStudentId } = useAppState();
@@ -39,9 +40,12 @@ export function Messages() {
     return (
       <div className="main-content">
         <div className="page-scroll stack">
-          <div>
-            <h1 className="h1">Messages</h1>
-            <p className="muted">Talk to {teacher.name} directly, or ask ATDT — their always-on teaching twin.</p>
+          <div className="row-between">
+            <div>
+              <h1 className="h1">Messages</h1>
+              <p className="muted">Talk to {teacher.name} directly, or ask ATDT — their always-on teaching twin.</p>
+            </div>
+            <SyncStatus />
           </div>
 
           <div style={{ display: "flex", gap: 16 }}>
@@ -119,9 +123,12 @@ export function Messages() {
   return (
     <div className="main-content">
       <div className="page-scroll stack">
-        <div>
-          <h1 className="h1">Messages</h1>
-          <p className="muted">Message any student in {currentCourse.title} directly.</p>
+        <div className="row-between">
+          <div>
+            <h1 className="h1">Messages</h1>
+            <p className="muted">Message any student in {currentCourse.title} directly.</p>
+          </div>
+          <SyncStatus />
         </div>
 
         <div style={{ display: "flex", gap: 16 }}>

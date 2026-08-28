@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { courses, documents as seedDocuments, quizBank as seedQuestions, type Course, type CourseDocument, type QuizQuestion } from "../data/mockData";
 import { appendProvenance, type ProvenanceEntry, type ProvenanceActor } from "../lib/provenance";
 import type { GapDescriptor, ScaffoldCandidate } from "../lib/gaps";
+import { fetchStream, postToStream } from "../lib/cloudSync";
 
 export type Role = "student" | "teacher";
 export type Sender = "student" | "teacher" | "atdt" | "asdt";
@@ -54,6 +55,7 @@ interface AppStateShape {
   provenance: ProvenanceEntry[];
   acceptScaffold: (gap: GapDescriptor, candidate: ScaffoldCandidate) => void;
   logEvent: (actor: ProvenanceActor, action: string, payload?: Record<string, unknown>) => void;
+  cloudSynced: boolean;
 }
 
 const AppContext = createContext<AppStateShape | null>(null);
@@ -117,6 +119,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [selectedStudentId, setSelectedStudentId] = useState("stu1");
   const [provenance, setProvenance] = useState<ProvenanceEntry[]>(() => load(PROVENANCE_KEY, []));
   const provenanceQueue = useRef<Promise<ProvenanceEntry[]>>(Promise.resolve(provenance));
+  const [cloudSynced, setCloudSynced] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(COURSE_KEY, courseId);
@@ -143,6 +146,43 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(PROVENANCE_KEY, JSON.stringify(provenance));
   }, [provenance]);
 
+  // Cross-device sync: poll the shared cloud store (if configured) and merge
+  // any items other devices have posted since we last checked. No-ops
+  // silently if no cloud datastore is connected — see api/sync.ts.
+  useEffect(() => {
+    let cancelled = false;
+
+    const mergeById = <T extends { id: string }>(prev: T[], incoming: T[]): T[] => {
+      const byId = new Map(prev.map((x) => [x.id, x]));
+      for (const item of incoming) byId.set(item.id, item);
+      return Array.from(byId.values()).sort((a, b) => a.id.localeCompare(b.id));
+    };
+
+    const poll = async () => {
+      const [cloudMessages, cloudDocs, cloudQuestions] = await Promise.all([
+        fetchStream<ChatMessage>("messages"),
+        fetchStream<CourseDocument>("documents"),
+        fetchStream<QuizQuestion>("questions"),
+      ]);
+      if (cancelled) return;
+      if (cloudMessages === null) {
+        setCloudSynced(false);
+        return;
+      }
+      setCloudSynced(true);
+      if (cloudMessages.length) setMessages((prev) => mergeById(prev, cloudMessages));
+      if (cloudDocs && cloudDocs.length) setDocuments((prev) => mergeById(prev, cloudDocs));
+      if (cloudQuestions && cloudQuestions.length) setQuestions((prev) => mergeById(prev, cloudQuestions));
+    };
+
+    poll();
+    const interval = window.setInterval(poll, 3500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   const currentCourse = courses.find((c) => c.id === courseId) || courses[0];
 
   // Serialized so concurrent calls can't race on the same prevHash.
@@ -161,20 +201,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const markWatched = (id: string) => setWatchedVideoIds((prev) => new Set(prev).add(id));
 
   const addDocument = (d: Omit<CourseDocument, "id">) => {
-    setDocuments((prev) => [{ ...d, id: `d${Date.now()}` }, ...prev]);
+    const doc: CourseDocument = { ...d, id: `d${Date.now()}${Math.random().toString(36).slice(2, 6)}` };
+    setDocuments((prev) => [doc, ...prev]);
+    postToStream("documents", doc);
     logEvent("teacher", "document.ingested", { title: d.title, topic: d.topic, hasContent: !!d.content });
   };
 
   const addQuestion = (q: Omit<QuizQuestion, "id">) => {
-    setQuestions((prev) => [...prev, { ...q, id: `q${Date.now()}` }]);
+    const question: QuizQuestion = { ...q, id: `q${Date.now()}${Math.random().toString(36).slice(2, 6)}` };
+    setQuestions((prev) => [...prev, question]);
+    postToStream("questions", question);
     logEvent("teacher", "examination.question_published", { topic: q.topic });
   };
 
   const sendMessage = (studentId: string, sender: Sender, text: string, channel: Channel) => {
-    setMessages((prev) => [
-      ...prev,
-      { id: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`, studentId, sender, text, channel, time: new Date().toLocaleString([], { hour: "2-digit", minute: "2-digit" }) },
-    ]);
+    const message: ChatMessage = {
+      id: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+      studentId,
+      sender,
+      text,
+      channel,
+      time: new Date().toLocaleString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setMessages((prev) => [...prev, message]);
+    postToStream("messages", message);
     logEvent(sender, `${channel}.message`, { studentId, length: text.length });
   };
 
@@ -220,6 +270,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         provenance,
         acceptScaffold,
         logEvent,
+        cloudSynced,
       }}
     >
       {children}
