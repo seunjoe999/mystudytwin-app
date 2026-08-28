@@ -1,55 +1,78 @@
 // Vercel serverless function — shared cloud state for cross-device sync.
 //
 // Backs the ASDT/ATDT "channels" (messages, documents, questions) with a
-// real Redis store (Upstash, via Vercel's Storage marketplace) so that a
+// real Redis store (connected via Vercel's Storage marketplace) so that a
 // student logged in on one device and a teacher logged in on another see
 // the same data, instead of each device's isolated localStorage.
 //
-// Activates only if REDIS env vars are configured (Vercel Dashboard ->
-// Storage -> Create Database -> Redis -> Connect to Project). Without
-// that, this returns 501 and the client silently keeps using
-// localStorage-only state, exactly as it did before — no regression.
+// Runs on the Node.js serverless runtime (not Edge) because it needs a
+// plain TCP connection to Redis via REDIS_URL, which Edge's isolate
+// cannot open. Activates only if REDIS_URL is configured (Vercel
+// Dashboard -> Storage -> Create Database -> Redis -> Connect to
+// Project). Without it, this returns 501 and the client silently keeps
+// using localStorage-only state — no regression.
 
-import { Redis } from "@upstash/redis";
-
-export const config = { runtime: "edge" };
+import Redis from "ioredis";
 
 declare const process: { env: Record<string, string | undefined> };
 
 const STREAMS = new Set(["messages", "documents", "questions"]);
 
+// Reused across warm invocations of the same serverless instance.
+let client: Redis | null | undefined;
+
 function getRedis(): Redis | null {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  return new Redis({ url, token });
+  if (client !== undefined) return client;
+  const url = process.env.REDIS_URL;
+  if (!url) {
+    client = null;
+    return null;
+  }
+  client = new Redis(url, { maxRetriesPerRequest: 2, connectTimeout: 5000 });
+  client.on("error", () => {
+    /* swallow — callers already handle a failed op via try/catch */
+  });
+  return client;
 }
 
-export default async function handler(req: Request): Promise<Response> {
+export default async function handler(
+  req: { method?: string; query: Record<string, string | string[] | undefined>; body?: unknown },
+  res: {
+    status: (code: number) => { json: (body: unknown) => void };
+  }
+) {
   const redis = getRedis();
   if (!redis) {
-    return new Response(JSON.stringify({ error: "No cloud datastore configured" }), { status: 501 });
+    res.status(501).json({ error: "No cloud datastore configured" });
+    return;
   }
 
-  const { searchParams } = new URL(req.url);
-  const stream = searchParams.get("stream") || "";
-  if (!STREAMS.has(stream)) {
-    return new Response(JSON.stringify({ error: "Unknown stream" }), { status: 400 });
+  const streamParam = req.query.stream;
+  const stream = Array.isArray(streamParam) ? streamParam[0] : streamParam;
+  if (!stream || !STREAMS.has(stream)) {
+    res.status(400).json({ error: "Unknown stream" });
+    return;
   }
   const key = `mystudytwin:${stream}`;
 
-  if (req.method === "GET") {
-    const items = await redis.lrange<Record<string, unknown>>(key, 0, -1);
-    return new Response(JSON.stringify({ items }), { status: 200, headers: { "Content-Type": "application/json" } });
-  }
+  try {
+    if (req.method === "GET") {
+      const raw = await redis.lrange(key, 0, -1);
+      const items = raw.map((r) => JSON.parse(r));
+      res.status(200).json({ items });
+      return;
+    }
 
-  if (req.method === "POST") {
-    const item = await req.json();
-    await redis.rpush(key, item);
-    // Cap the log so a long demo session can't grow the list unbounded.
-    await redis.ltrim(key, -2000, -1);
-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
-  }
+    if (req.method === "POST") {
+      const item = req.body;
+      await redis.rpush(key, JSON.stringify(item));
+      await redis.ltrim(key, -2000, -1);
+      res.status(200).json({ ok: true });
+      return;
+    }
 
-  return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    res.status(405).json({ error: "Method not allowed" });
+  } catch {
+    res.status(500).json({ error: "Datastore request failed" });
+  }
 }
