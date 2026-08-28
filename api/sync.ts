@@ -12,16 +12,16 @@
 // Project). Without it, this returns 501 and the client silently keeps
 // using localStorage-only state — no regression.
 
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 
 declare const process: { env: Record<string, string | undefined> };
 
 const STREAMS = new Set(["messages", "documents", "questions"]);
 
 // Reused across warm invocations of the same serverless instance.
-let client: Redis | null | undefined;
+let client: InstanceType<typeof Redis> | null | undefined;
 
-function getRedis(): Redis | null {
+function getRedis(): InstanceType<typeof Redis> | null {
   if (client !== undefined) return client;
   const url = process.env.REDIS_URL;
   if (!url) {
