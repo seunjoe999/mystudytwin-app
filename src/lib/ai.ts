@@ -98,6 +98,24 @@ async function askServerless(systemPrompt: string, userMessage: string): Promise
   }
 }
 
+export interface HostedBackendStatus {
+  backend: "gemini" | "ollama-cloud" | "anthropic" | "openai" | "none";
+  model?: string;
+}
+
+export async function getHostedBackendStatus(): Promise<HostedBackendStatus> {
+  const { signal, cancel } = withTimeout(4000);
+  try {
+    const res = await fetch("/api/chat", { signal });
+    cancel();
+    if (!res.ok) return { backend: "none" };
+    return (await res.json()) as HostedBackendStatus;
+  } catch {
+    cancel();
+    return { backend: "none" };
+  }
+}
+
 export async function askAI(systemPrompt: string, userMessage: string): Promise<string | null> {
   const ollamaReply = await askOllama(systemPrompt, userMessage);
   if (ollamaReply) return ollamaReply;

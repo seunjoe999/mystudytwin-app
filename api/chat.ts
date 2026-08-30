@@ -19,7 +19,25 @@ interface ChatBody {
   userMessage: string;
 }
 
+const geminiModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+const ollamaCloudModel = process.env.OLLAMA_CLOUD_MODEL || "gpt-oss:20b";
+
 export default async function handler(req: Request): Promise<Response> {
+  // Cheap GET probe so the client can show which hosted backend (if any) is
+  // configured, without spending a real generation call to find out.
+  if (req.method === "GET") {
+    const backend = process.env.GEMINI_API_KEY
+      ? { backend: "gemini", model: geminiModel }
+      : process.env.OLLAMA_API_KEY
+        ? { backend: "ollama-cloud", model: ollamaCloudModel }
+        : process.env.ANTHROPIC_API_KEY
+          ? { backend: "anthropic", model: "claude-3-5-haiku-latest" }
+          : process.env.OPENAI_API_KEY
+            ? { backend: "openai", model: "gpt-4o-mini" }
+            : { backend: "none" };
+    return new Response(JSON.stringify(backend), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
@@ -27,9 +45,7 @@ export default async function handler(req: Request): Promise<Response> {
   const { systemPrompt, userMessage } = (await req.json()) as ChatBody;
 
   const geminiKey = process.env.GEMINI_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   const ollamaCloudKey = process.env.OLLAMA_API_KEY;
-  const ollamaCloudModel = process.env.OLLAMA_CLOUD_MODEL || "gpt-oss:20b";
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
 
