@@ -11,9 +11,13 @@ import { Planner } from "./pages/Planner";
 import { Messages } from "./pages/Messages";
 import { AuditLog } from "./pages/AuditLog";
 import { AppStateProvider, useAppState } from "./state/AppState";
+import { Login } from "./pages/Login";
 
 function Shell() {
-  const { role } = useAppState();
+  const { role, loggedIn } = useAppState();
+
+  if (!loggedIn) return <Login />;
+
   return (
     <div className="app-shell">
       <Sidebar />

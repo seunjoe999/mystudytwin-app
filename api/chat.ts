@@ -5,9 +5,10 @@
 // Without one, it returns 501 and the client falls back to the offline
 // template-based tutor logic, so the app works perfectly with zero setup.
 //
-// Supported, checked in this order: OLLAMA_API_KEY (Ollama Cloud/Turbo —
-// reachable by any visitor, not just the presenter's machine), then
-// ANTHROPIC_API_KEY (Claude), then OPENAI_API_KEY (GPT).
+// Supported, checked in this order: GEMINI_API_KEY (Google Gemini — has a
+// free tier, so it's the recommended default for this project), then
+// OLLAMA_API_KEY (Ollama Cloud/Turbo), then ANTHROPIC_API_KEY (Claude),
+// then OPENAI_API_KEY (GPT).
 
 export const config = { runtime: "edge" };
 
@@ -25,12 +26,32 @@ export default async function handler(req: Request): Promise<Response> {
 
   const { systemPrompt, userMessage } = (await req.json()) as ChatBody;
 
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const ollamaCloudKey = process.env.OLLAMA_API_KEY;
   const ollamaCloudModel = process.env.OLLAMA_CLOUD_MODEL || "gpt-oss:20b";
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
 
   try {
+    if (geminiKey) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: userMessage }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+          }),
+        }
+      );
+      if (!res.ok) return new Response(JSON.stringify({ error: "Upstream error (Gemini)" }), { status: 502 });
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+      return new Response(JSON.stringify({ text }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+
     if (ollamaCloudKey) {
       const res = await fetch("https://ollama.com/api/chat", {
         method: "POST",

@@ -33,6 +33,9 @@ interface AppStateShape {
   setCurrentCourseId: (id: string) => void;
   role: Role;
   toggleRole: () => void;
+  loggedIn: boolean;
+  login: (role: Role) => void;
+  logout: () => void;
   sessions: PlannerSession[];
   addSession: (s: Omit<PlannerSession, "id">) => void;
   removeSession: (id: string) => void;
@@ -68,6 +71,8 @@ const DOCS_KEY = "mystudytwin.documents";
 const QUESTIONS_KEY = "mystudytwin.questions";
 const MESSAGES_KEY = "mystudytwin.messages.v2";
 const PROVENANCE_KEY = "mystudytwin.provenance";
+const ROLE_KEY = "mystudytwin.role";
+const LOGGED_IN_KEY = "mystudytwin.loggedIn";
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -108,7 +113,8 @@ const defaultMessages: ChatMessage[] = [
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [courseId, setCourseId] = useState(() => localStorage.getItem(COURSE_KEY) || courses[0].id);
-  const [role, setRole] = useState<Role>("student");
+  const [role, setRole] = useState<Role>(() => (localStorage.getItem(ROLE_KEY) as Role) || "student");
+  const [loggedIn, setLoggedIn] = useState<boolean>(() => localStorage.getItem(LOGGED_IN_KEY) === "true");
   const [sessions, setSessions] = useState<PlannerSession[]>(() => load(SESSIONS_KEY, defaultSessions));
   const [teacherSessions, setTeacherSessions] = useState<PlannerSession[]>(() => load(TEACHER_SESSIONS_KEY, defaultTeacherSessions));
   const [watchedVideoIds, setWatchedVideoIds] = useState<Set<string>>(loadWatched);
@@ -145,6 +151,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem(PROVENANCE_KEY, JSON.stringify(provenance));
   }, [provenance]);
+  useEffect(() => {
+    localStorage.setItem(ROLE_KEY, role);
+  }, [role]);
+  useEffect(() => {
+    localStorage.setItem(LOGGED_IN_KEY, String(loggedIn));
+  }, [loggedIn]);
 
   // Cross-device sync: poll the shared cloud store (if configured) and merge
   // any items other devices have posted since we last checked. No-ops
@@ -248,6 +260,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setCurrentCourseId: setCourseId,
         role,
         toggleRole: () => setRole((r) => (r === "student" ? "teacher" : "student")),
+        loggedIn,
+        login: (r: Role) => {
+          setRole(r);
+          setLoggedIn(true);
+          logEvent(r, "auth.login", {});
+        },
+        logout: () => {
+          logEvent(role, "auth.logout", {});
+          setLoggedIn(false);
+        },
         sessions,
         addSession,
         removeSession,

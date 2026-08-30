@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Video, Users, Timer, BookOpen, BarChart3, Calendar, GraduationCap, Brain, MessageCircle, ShieldCheck } from "lucide-react";
+import { Video, Users, Timer, BookOpen, BarChart3, Calendar, GraduationCap, Brain, MessageCircle, ShieldCheck, LogOut } from "lucide-react";
 import { courses, teacher, student } from "../data/mockData";
 import { useAppState } from "../state/AppState";
 
@@ -24,7 +24,7 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const { currentCourse, setCurrentCourseId, role, toggleRole, toggleCognitive } = useAppState();
+  const { currentCourse, setCurrentCourseId, role, toggleRole, toggleCognitive, logout } = useAppState();
   const isTeacher = role === "teacher";
   const modes = isTeacher ? teacherModes : studentModes;
   const person = isTeacher ? teacher : student;
@@ -91,17 +91,24 @@ export function Sidebar() {
         {isTeacher ? "Teaching Twin & Roster" : "Your Cognitive Profile"}
       </button>
 
-      <button className="teacher-toggle" onClick={toggleRole}>
+      <button className="teacher-toggle" onClick={toggleRole} title="Quick-switch role on this device (for solo demoing)">
         <GraduationCap size={14} />
-        {isTeacher ? "Switch to Student Account" : "Switch to Teacher Account"}
+        {isTeacher ? "Preview as Student (this device)" : "Preview as Teacher (this device)"}
       </button>
 
       <div className="sidebar-footer">
         <div className="avatar">{person.initials}</div>
-        <div>
+        <div style={{ flex: 1 }}>
           <div className="footer-name">{person.name}</div>
           <div className="footer-role">{person.role}</div>
         </div>
+        <button
+          onClick={logout}
+          title="Log out"
+          style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", opacity: 0.7, display: "flex", padding: 4 }}
+        >
+          <LogOut size={16} />
+        </button>
       </div>
     </nav>
   );
