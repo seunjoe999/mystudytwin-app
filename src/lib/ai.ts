@@ -8,6 +8,7 @@
 const OLLAMA_BASE = "http://localhost:11434";
 const OLLAMA_MODEL_KEY = "mystudytwin.ollamaModel";
 const TIMEOUT_MS = 6000;
+const SERVERLESS_TIMEOUT_MS = 12000; // hosted models (e.g. Gemini) can take longer than local Ollama
 
 function withTimeout(ms: number): { signal: AbortSignal; cancel: () => void } {
   const controller = new AbortController();
@@ -79,7 +80,7 @@ async function askOllama(systemPrompt: string, userMessage: string): Promise<str
 }
 
 async function askServerless(systemPrompt: string, userMessage: string): Promise<string | null> {
-  const { signal, cancel } = withTimeout(TIMEOUT_MS);
+  const { signal, cancel } = withTimeout(SERVERLESS_TIMEOUT_MS);
   try {
     const res = await fetch("/api/chat", {
       method: "POST",

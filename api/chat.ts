@@ -27,7 +27,7 @@ export default async function handler(req: Request): Promise<Response> {
   const { systemPrompt, userMessage } = (await req.json()) as ChatBody;
 
   const geminiKey = process.env.GEMINI_API_KEY;
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   const ollamaCloudKey = process.env.OLLAMA_API_KEY;
   const ollamaCloudModel = process.env.OLLAMA_CLOUD_MODEL || "gpt-oss:20b";
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
