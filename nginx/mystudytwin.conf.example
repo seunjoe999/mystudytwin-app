@@ -1,0 +1,62 @@
+# Add this as a new server block in the SAME nginx.conf CompCare Hub already
+# uses on the VPS (healthark's nginx/nginx.conf) — this app doesn't run its
+# own nginx, it shares the one already running alongside CompCare Hub.
+#
+# Before this works:
+#   1. Point a DNS A record for the subdomain below at the VPS IP
+#      (163.245.223.58) — e.g. mystudytwin.compcarehub.co.uk.
+#   2. Get a cert for it: certbot certonly --webroot -w /var/www/certbot
+#      -d mystudytwin.compcarehub.co.uk (same flow already used for the
+#      main domain — see healthark/nginx/nginx-init.conf for reference).
+#   3. Paste the two blocks below into healthark's nginx/nginx.conf,
+#      replacing mystudytwin.compcarehub.co.uk with the real subdomain,
+#      then reload nginx (docker exec <nginx_container> nginx -s reload,
+#      or `docker compose restart nginx`).
+#
+# The app itself runs with --network host on port 3002 (see
+# .github/workflows/docker-build.yml), so nginx reaches it via
+# 127.0.0.1:3002 rather than a Docker container name.
+
+server {
+    listen 80;
+    server_name mystudytwin.compcarehub.co.uk;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://mystudytwin.compcarehub.co.uk$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name mystudytwin.compcarehub.co.uk;
+
+    ssl_certificate     /etc/letsencrypt/live/mystudytwin.compcarehub.co.uk/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mystudytwin.compcarehub.co.uk/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 20M;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location / {
+        proxy_pass         http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection 'upgrade';
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 10s;
+    }
+}
